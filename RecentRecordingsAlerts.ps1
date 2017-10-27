@@ -1,5 +1,5 @@
 #Author: Alex Dobrovansky
-#Last updated: 23 Oct 17
+#Last updated: 27 Oct 17
 
 #When run, this script sends a message to slack telling me the number of .mp3 files larger than 50KB, smaller than 50KB, and 1 or 0KB that are less than 2 hours old.
 #I use this to know if .mp3 files are being generated in the specified location.
@@ -18,8 +18,7 @@ $fileType = ".mp3" #Filetype of recordings
 
 
 #create start of message
-$body = "Looking for files created after $date $(([System.TimeZone]::CurrentTimeZone).StandardName)"`
-    + "`n `n"
+$body = "Looking for files created after $($date.ToUniversalTime()) UTC" + "`n `n"
 
 #checks the number of recordings in each location
 foreach ($loc in $locations){
@@ -28,7 +27,7 @@ foreach ($loc in $locations){
     $botBody = $site + "," + $loc + "," # add the site and location before it gets changed
     
     #limit the location that it searchs to current day
-    $loc += "\$(Get-Date -Format yyyy)\$(Get-Date -Format MM)\$(Get-Date -Format dd)\"
+    $loc += "$(get-date -UFormat '\%Y\%m\%d\')"
 
     #search for files
     $objects = Get-ChildItem -Path $loc -Recurse | Where-Object {$_.Extension -eq $fileType -and $_.LastWriteTime -gt $date}
