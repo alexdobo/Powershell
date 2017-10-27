@@ -60,7 +60,8 @@ function Within-Tolerances {
 $RTMSession = Invoke-RestMethod -Uri https://slack.com/api/rtm.start -Body @{token="$Token"}
 
 "I am $($RTMSession.self.name)"
-
+$rtmCount = 0
+$msgCount = 0
 Try{
 
     Do{
@@ -95,7 +96,85 @@ Try{
                 }
                 sleep 21
             }
-            
+
+            #deal with data
+            if ($rtmCount -gt 10 -and $msgCount -gt 0){ #waits for 10 cycles before sending any messages
+                $rmtCount = 0
+				$msgCount - 0
+				$listData
+
+                $csv = ""
+                $csv = Import-Csv "recordingData.csv"
+                $bigMsg = "For the site $($listData[1].site):"
+                $attach = "["
+                foreach ($data in $listData){
+                    #for each line of data
+                    $collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($Data.site), $($Data.location)"}
+                    
+                    $check1 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Large | measure -Average).Average -value $Data.large
+                    $check2 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Small | measure -Average).Average -value $Data.small
+                    $check3 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Empty | measure -Average).Average -value $Data.empty
+
+					
+                    if (!$check1 -or !$check2 -or !$check3){
+                        "somethings's not right"
+                        $color = "warning"   
+                    }else {
+                        $color = "good"
+                    }
+										
+					if ($data.lastRec -lt (((get-date).AddHours(-2)).toUniversalTime)){ #something about last col file being older than 2 hours
+						$color = "danger"
+					}
+                
+                    Send-SlackMsg -Channel $alertsChannel -Body $bigMsg -attachments $attach
+
+                    $attach += "{
+                        'fallback':'Alert for location $($data.location)',
+                        'color': '$color',
+                        'title': '$($site.location)',
+                        'fields': [
+                            {
+                                'title': '.col file'
+                                'value': '$($data.LastCol)'
+                            },
+                            {
+                                'title': '.rec file'
+                                'value': '$($data.LastRec)'
+                            },
+                            {
+                                'title': 'Large Rec'
+                                'value': '$($data.Large)'
+                            },
+                            {
+                                'title': 'Small Rec'
+                                'value': '$($data.small)'
+                            },
+                            {
+                                'title': 'Empty Rec'
+                                'value': '$($data.empty)'
+                            },
+                            {
+                                'title': 'Free Space'
+                                'value': '$(([double]($data.FreeSpace)).ToString('P'))'
+                            }
+
+                        ]
+
+                    },"
+
+                }
+
+                $attach = $attach.Substring(0,$attach.Length-1) #removes last ,
+                $attach += "]"
+				$attach
+				send-slackmsg -body $bigMsg -attachments $attach -channel $alertsChannel
+				
+                if (!$siteList.contains($Data.site)){
+                    $siteList.add($data.site)
+                }
+            }#end deal with data
+
             $RTM = ""
 
             Do {
@@ -105,8 +184,11 @@ Try{
 
             } Until ($conn.result.count -lt $size)
             $RTM
-
+            $rtmCount
             if ($RTM){
+                if (msgCount -gt 0) {
+					$rtmCount += 1
+				}
                 $RTM = ($RTM | convertfrom-json)
                 Switch ($RTM){
                     {($_.type -eq "message") -and (!$_.reply_to)} {
@@ -160,7 +242,7 @@ Try{
                                     $joke = ((Invoke-RestMethod -Method Get -Uri "http://api.icndb.com/jokes/random").value).joke
                                     send-SlackMsg -body $joke -channel $rtm.channel
                                 }
-                                ##cat fact - doesnt work currently
+                                ##cat fact
                                 #{$_ -match ".*cat fact.*"}{
                                 #    $catFact = ""
                                 #    $catFact = ((Invoke-RestMethod -Method Get -Uri "https://catfact.ninja/fact").value).fact
@@ -228,42 +310,35 @@ Try{
                                     $tolerance = $matches[1]
                                     send-SlackMsg -body "The tolerance is now set to $tolerance" -channel $rtm.channel
                                 }
-                                {$_ -match ".+,.+,\d+,\d+,\d+,\d\d?\/\d\d?\/\d{4}\s.+"}{
-                                    #Site,Loc,Large,Small,Empty,Date (UTC)
+
+
+                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d\d?\/\d\d?\/\d{4}\s.+),(\d\.\d+),(\d\d?\/\d\d?\/\d{4}\s.+),(\d\d?\/\d\d?\/\d{4}\s.+)"}{
+                                    #Site,Loc,Large,Small,Empty,Date (UTC),Free Space,Last Col Date,Last Rec Date
                                     #is a csv, do analysis
- 
-                                    $splitData = $_ -split "," 
-                                    $csv = ""
-                                    if (!$siteList.contains($splitData[0])){
-                                        $siteList.add($splitData[0])
+                                    $msgCount+=1
+
+
+                                    $splitData = $_ -split "`n"
+                                    $listData = New-Object System.Collections.ArrayList
+
+
+                                    $splitData = $line -split ","
+                                    $info = @{
+                                        "Site" = $splitdata[0];
+                                        "Location" = $splitdata[1];
+                                        "Large" = $splitdata[2];
+                                        "Small" = $splitdata[3];
+                                        "Empty" = $splitdata[4];
+                                        "Date" = $splitdata[5];
+                                        "FreeSpace" = $splitdata[6];
+                                        "LastCol" = $splitdata[7];
+                                        "LastRec" = $splitdata[8];
                                     }
-                                    #latest data, site name
-    
-                                    $csv = Import-Csv "recordingData.csv"
-
-                                    $collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($splitData[0]), $($splitData[1])"}
+                                    $listdata.add($info)
 
 
-                                    $check1 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Large | measure -Average).Average -value $splitData[2]
-                                    $check2 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Small | measure -Average).Average -value $splitData[3]
-                                    $check3 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Empty | measure -Average).Average -value $splitData[4]
-                                    if (!$check1 -or !$check2 -or !$check3){
-                                        "somethings's not right"
-                                        $msg = ""
-                                        $msg = "Hey! `n Looks like something isn't quite at the site $($splitData[0])? Might be worth looking into! `n "
-                                        if (!$check1){
-                                            $msg += "The number of large recordings is usually $($($collec.Group.Large | measure -Average).Average), but this time there are $($splitData[2]) recordings! `n "
-                                        }
-                                        if (!$check2){
-                                            $msg += "The number of small recordings is usually $($($collec.Group.Small | measure -Average).Average), but this time there are $($splitData[3]) recordings! `n "
-                                        }
-                                        if (!$check3) {
-                                            $msg += "The number of 0 or 1KB recordings is usually $($($collec.Group.Empty | measure -Average).Average), but this time there are $($splitData[4]) recordings! `n "
-                                        }
-                                        send-SlackMsg -body $msg -channel $alertsChannel
-                                    }else{
-                                        "Everything looks good!"
-                                    }
+                                    
+                                   
                                 
                                     $_ | Out-File "recordingData.csv" -Append
 
