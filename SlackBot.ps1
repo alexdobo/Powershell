@@ -1,12 +1,10 @@
 #Author: Alex Dobrovansky
-#Date: 23 Oct 17
-
-#Most of this code has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot 
+#Date: 03 Nov 17
 
 
-$token = "TOKEN GO HERE"
+$token = "xoxb"
 $tolerance = 5
-$alertsChannel = "CHANNEL GO HERE"
+$alertsChannel = "CK"
 $monitorList = New-Object System.Collections.ArrayList
 import-csv "monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
 $siteList = New-Object System.Collections.ArrayList
@@ -33,7 +31,7 @@ function Send-SlackMsg {
     }else{
         $message.as_user = "false"
         $message.username = "ps-bot"
-        $message.token = "TOKEN GO HERE"
+        $message.token = "xoxb-"
         $message.attachments = $attachments
         Invoke-WebRequest -Method post -Uri "https://slack.com/api/chat.postMessage" -body $message | out-file -filepath "slack.log" -append
     }
@@ -52,9 +50,6 @@ function Within-Tolerances {
         return $False
     }
 }
-
-
-
 
 #Web API call starts the session and gets a websocket URL to use.
 $RTMSession = Invoke-RestMethod -Uri https://slack.com/api/rtm.start -Body @{token="$Token"}
@@ -98,14 +93,15 @@ Try{
             }
 
             #deal with data
-            if ($rtmCount -gt 10 -and $msgCount -gt 0){ #waits for 10 cycles before sending any messages
-                $rmtCount = 0
-				$msgCount - 0
+            if ($rtmCount -gt 5 -and $msgCount -gt 0){ #waits for 10 cycles before sending any messages
+                #because every line of data is a new message, this joins them all so we don't get spammed
+                $rtmCount = 0
+				$msgCount = 0
 				$listData
 
                 $csv = ""
                 $csv = Import-Csv "recordingData.csv"
-                $bigMsg = "For the site $($listData[1].site):"
+                $bigMsg = "For the site "+ $listData[0].site
                 $attach = "["
                 foreach ($data in $listData){
                     #for each line of data
@@ -123,52 +119,60 @@ Try{
                         $color = "good"
                     }
 										
-					if ($data.lastRec -lt (((get-date).AddHours(-2)).toUniversalTime)){ #something about last col file being older than 2 hours
-						$color = "danger"
-					}
+		    if ($data.lastRec -lt (((get-date).AddHours(-2)).toUniversalTime)){ #something about last col file being older than 2 hours
+		    	$color = "danger"
+		    }
                 
-                    Send-SlackMsg -Channel $alertsChannel -Body $bigMsg -attachments $attach
+                    #Send-SlackMsg -Channel $alertsChannel -Body $bigMsg -attachments $attach
 
-                    $attach += "{
-                        'fallback':'Alert for location $($data.location)',
-                        'color': '$color',
-                        'title': '$($site.location)',
-                        'fields': [
+                    $attach += '{
+                        "fallback":"Alert for location '+$data.location+'",
+                        "color": "'+$color+'",
+                        "title": "'+$site.location+'",
+                        "fields": [
                             {
-                                'title': '.col file'
-                                'value': '$($data.LastCol)'
+                                "title": "Last write to .col file",
+                                "value": "<!date^'+ ($data.LastCol) +'^{time} on {date}|you need to update slack>",
+                                "short": true
                             },
                             {
-                                'title': '.rec file'
-                                'value': '$($data.LastRec)'
+                                "title": "Last write to .rec file",
+                                "value": "<!date^'+ ($data.LastRec) +'^{time} on {date}|you need to update slack>",
+                                "short": true
                             },
                             {
-                                'title': 'Large Rec'
-                                'value': '$($data.Large)'
+                                "title": "Large Rec",
+                                "value": "'+$data.Large+'",
+                                "short": true
                             },
                             {
-                                'title': 'Small Rec'
-                                'value': '$($data.small)'
+                                "title": "Small Rec",
+                                "value": "'+$data.small+'",
+                                "short": true
                             },
                             {
-                                'title': 'Empty Rec'
-                                'value': '$($data.empty)'
+                                "title": "Empty Rec",
+                                "value": "'+$data.empty+'",
+                                "short": true
                             },
                             {
-                                'title': 'Free Space'
-                                'value': '$(([double]($data.FreeSpace)).ToString('P'))'
+                                "title": "Free Space",
+                                "value": "'+([double]($data.FreeSpace)).ToString("P")+'",
+                                "short": true
                             }
 
                         ]
 
-                    },"
+                        },'
 
-                }
+                }#end loop
 
-                $attach = $attach.Substring(0,$attach.Length-1) #removes last ,
+                $attach = $attach.Substring(0,$attach.Length-1) #removes last , from attach
                 $attach += "]"
-				$attach
-				send-slackmsg -body $bigMsg -attachments $attach -channel $alertsChannel
+				$attach = $attach -replace "\\", "\\"
+                $attach = $attach -replace "\/", "\/"
+                $attach
+		send-slackmsg -body $bigMsg -attachments $attach -channel $alertsChannel #send the large message
 				
                 if (!$siteList.contains($Data.site)){
                     $siteList.add($data.site)
@@ -186,7 +190,7 @@ Try{
             $RTM
             $rtmCount
             if ($RTM){
-                if (msgCount -gt 0) {
+                if ($msgCount -gt 0) {
 					$rtmCount += 1
 				}
                 $RTM = ($RTM | convertfrom-json)
@@ -242,7 +246,7 @@ Try{
                                     $joke = ((Invoke-RestMethod -Method Get -Uri "http://api.icndb.com/jokes/random").value).joke
                                     send-SlackMsg -body $joke -channel $rtm.channel
                                 }
-                                ##cat fact
+                                ##cat fact - not working
                                 #{$_ -match ".*cat fact.*"}{
                                 #    $catFact = ""
                                 #    $catFact = ((Invoke-RestMethod -Method Get -Uri "https://catfact.ninja/fact").value).fact
@@ -312,17 +316,15 @@ Try{
                                 }
 
 
-                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d\d?\/\d\d?\/\d{4}\s.+),(\d\.\d+),(\d\d?\/\d\d?\/\d{4}\s.+),(\d\d?\/\d\d?\/\d{4}\s.+)"}{
-                                    #Site,Loc,Large,Small,Empty,Date (UTC),Free Space,Last Col Date,Last Rec Date
+                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d+),(\d\.\d+),(\d+),(\d+)"}{
+                                    #Site,Loc,Large,Small,Empty,Date (UNIX),Free Space,Last Col Date,Last Rec Date
                                     #is a csv, do analysis
                                     $msgCount+=1
 
-
-                                    $splitData = $_ -split "`n"
                                     $listData = New-Object System.Collections.ArrayList
 
 
-                                    $splitData = $line -split ","
+                                    $splitData = $_ -split ","
                                     $info = @{
                                         "Site" = $splitdata[0];
                                         "Location" = $splitdata[1];
@@ -335,12 +337,19 @@ Try{
                                         "LastRec" = $splitdata[8];
                                     }
                                     $listdata.add($info)
-
-
-                                    
-                                   
-                                
+                                    $info
                                     $_ | Out-File "recordingData.csv" -Append
+
+                                }
+                                
+                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d\d?\/\d\d?\/\d{4}\s.+)"}{
+                                    #Site,Loc,Large,Small,Empty,Date (UTC),Free Space
+                                    #old style. still here for legacy support
+                                    #just writes to file                                
+                                    $_ | Out-File "recordingData.csv" -Append
+                                    #and then complains about it
+                                    $splitData = $_ -split ","
+                                    send-slackmsg -body "I received some data from a site using an old data format. Please update $($splitData[0])" -channel $alertsChannel #send the large message
 
                                 }
                                 default { 
