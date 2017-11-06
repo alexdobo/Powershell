@@ -4,9 +4,9 @@
 #a lot of the code that runs the bot has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot
 
 
-$token = "xoxb-260768813511-LMFU9BYiNkH9ZvXZ8vZB59tW"
+$token = "xoxb-"
 $tolerance = 5
-$alertsChannel = "C7MJWNARK"
+$alertsChannel = ""
 $monitorList = New-Object System.Collections.ArrayList
 import-csv "monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
 $siteList = New-Object System.Collections.ArrayList
