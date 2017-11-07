@@ -1,12 +1,12 @@
 #Author: Alex Dobrovansky
-#Date: 06 Nov 17
+#Date: 07 Nov 17
 
 #a lot of the code that runs the bot has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot
 
 
-$token = "xoxb-"
+$token = get-content "token.txt" #not making that mistake again...
 $tolerance = 5
-$alertsChannel = ""
+$alertsChannel = get-content "alertsChannel.txt"
 $monitorList = New-Object System.Collections.ArrayList
 import-csv "monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
 $siteList = New-Object System.Collections.ArrayList
@@ -25,7 +25,7 @@ function Send-SlackMsg {
     $json = $message | ConvertTo-Json
 
     $array = @()
-    $encoding=
+    
     $array = [System.Text.Encoding]::UTF8.GetBytes($json)
     $Msg = New-Object System.ArraySegment[byte]  -ArgumentList @(,$Array)
 
@@ -46,8 +46,8 @@ function Send-SlackMsg {
 
 
 function Within-Tolerances {
-    param ($tol, $value, $avg)
-    if ($value -ge ($avg - $tolerance) -and $value -le  ($avg + $tolerance))    {
+    param ([int]$tol, [int]$value, [int]$avg)
+    if ($value -ge ($avg - $tol) -and $value -le  ($avg + $tol))    {
         return $True
     }else {
         return $False
@@ -56,20 +56,21 @@ function Within-Tolerances {
 
 function ConvertTo-Attachment { #receives a list of data and puts in an attachment form
     param ($Data, $Color, $Text)
+$null = @(    #beacuse it keeps on returning more than i want
     if ($Color.count -eq 0){
         $Color = New-Object System.Collections.ArrayList
-        for($z; $z -lt $data.Length; $z++){
+        for($z; $z -lt $data.Count; $z++){
             $Color.add("good")
         }
     }
     if ($Text.count -eq 0){
         $Text = New-Object System.Collections.ArrayList
-        for($z; $z -lt $data.Length; $z++){
+        for($y; $y -lt $data.Count; $y++){
             $Text.add("")
         }
     }  
     $value = "["
-    if ($Data.Length -eq $Color.count -eq $Text.count){
+    if ($Data.Count -eq $Color.count -eq $Text.count){
         if ($Color.Count -eq 1){
             
             $value += '{
@@ -79,12 +80,12 @@ function ConvertTo-Attachment { #receives a list of data and puts in an attachme
                 "text": "'+$Text+'",
                 "fields": [
                     {
-                        "title": "Last write to .col file",
+                        "title": "Last recorded write to .col file",
                         "value": "<!date^'+ ($data.LastCol) +'^{time} on {date}|you need to update slack>",
                         "short": true
                     },
                     {
-                        "title": "Last write to .rec file",
+                        "title": "Last recorded write to .rec file",
                         "value": "<!date^'+ ($data.LastRec) +'^{time} on {date}|you need to update slack>",
                         "short": true
                     },
@@ -122,12 +123,12 @@ function ConvertTo-Attachment { #receives a list of data and puts in an attachme
                     "text": "'+$Text[$i]+'",
                     "fields": [
                         {
-                            "title": "Last write to .col file",
+                            "title": "Last recorded write to .col file",
                             "value": "<!date^'+ ($datum.LastCol) +'^{time} on {date}|you need to update slack>",
                             "short": true
                         },
                         {
-                            "title": "Last write to .rec file",
+                            "title": "Last recorded write to .rec file",
                             "value": "<!date^'+ ($datum.LastRec) +'^{time} on {date}|you need to update slack>",
                             "short": true
                         },
@@ -155,16 +156,95 @@ function ConvertTo-Attachment { #receives a list of data and puts in an attachme
                 },'
             }
         }
-    }else{"Arrays are not the same size!"}
+    }else{
+    "Arrays are not the same size!"
+        "Data.count = $($Data.count)"
+    "Color.count = $($Color.count)"
+    "Text.count = $($Text.count)"
+    }
     
 
 
     $value = $value.Substring(0,$value.Length-1) #removes last , from attach
     $value += "]"
-	$value = $value -replace "\\", "\\" #fixes any invalid json
+    $value = $value -replace "\\", "\\" #fixes any invalid json
+    $value = $value -replace "\\\\n","\n"
     $value = $value -replace "\/", "\/"
+)
     return $value
 }
+
+
+
+function set-ColorText{
+    param(
+        $Data,
+        [bool]$debug = $False 
+        )
+$null=@(
+    $colorList = New-Object System.Collections.ArrayList
+    $textList = new-Object system.collections.arrayList
+    foreach ($datum in $Data){
+        $datum
+        #for each line of data
+        $color = "good"
+        $attachText = ""
+<#         $collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($datum.site), $($datum.location)"}
+        
+        $largeAvg = (($collec.Group.Large | measure -Average).Average) 
+        $smallAvg = (($collec.Group.Small | measure -Average).Average) 
+        $emptyAvg = (($collec.Group.Empty | measure -Average).Average) 
+
+
+        #$check1 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Large | measure -Average).Average) -value $datum.large
+        $check1 = $datum.Large -in ($largeAvg-$tolerance)..($largeAvg+$tolerance)
+        #$check2 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Small | measure -Average).Average) -value $datum.small
+        $check2 = $datum.Small -in ($SmallAvg-$tolerance)..($SmallAvg+$tolerance)
+        #$check3 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Empty | measure -Average).Average) -value $datum.empty
+        $check3 = $datum.Empty -in ($EmptyAvg-$tolerance)..($EmptyAvg+$tolerance)
+
+        
+        if(($check1 -or $check2 -or $check3)){
+            
+            $color = "warning"
+            $attachText += "The number of recordings isn't within tolerance \n "
+            if($debug){
+                if($check1){
+                    $attachText += "The average for Large recordings is $(($collec.Group.Large | measure -Average).Average), but the current value is $($datum.large). \n"
+                }
+                if($check2){
+                    $attachText += "The average for Small recordings is $(($collec.Group.Small | measure -Average).Average), but the current value is $($datum.Small). \n"
+                }
+                if($check3){
+                    $attachText += "The average for empty recordings is $(($collec.Group.empty | measure -Average).Average), but the current value is $($datum.empty). \n"
+                }
+            }
+        }else {
+            $color = "good"
+        } #>
+
+                            
+        if ($datum.lastRec -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))) { #something about last rec file being older than 2 hours
+            $color = "danger"
+            $attachText += "The .rec file hasn't been written to in over two hours! \n"
+        }
+        if ($datum.lastCol -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))){ #something about last col file being older than 2 hours
+            $color = "danger"
+            $attachText += "The .col file hasn't been written to in over two hours! \n"
+        }
+    
+        $colorList.add($color)
+        $textList.add($attachText)
+
+
+
+    }#end loop
+)
+    return $colorList, $textList
+}  
+
+
+
 
 #Web API call starts the session and gets a websocket URL to use.
 $RTMSession = Invoke-RestMethod -Uri https://slack.com/api/rtm.start -Body @{token="$Token"}
@@ -221,45 +301,10 @@ Try{
                 $colorList = New-Object System.Collections.ArrayList
                 $textList = new-Object system.collections.arrayList
                 $bigMsg = "For the site "+ $listData[0].site
-                $attach = "["
-                foreach ($data in $listData){
-                    $data
-                    #for each line of data
-                    $attachText = ""
-                    $collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($Data.site), $($Data.location)"}
-                    
-                    $check1 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Large | measure -Average).Average -value $Data.large
-                    $check2 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Small | measure -Average).Average -value $Data.small
-                    $check3 = Within-Tolerances -tol $tolerance -avg $($collec.Group.Empty | measure -Average).Average -value $Data.empty
-
-					
-                    if (!$check1 -or !$check2 -or !$check3){
-                        "somethings's not right"
-                        $color = "warning"   
-                    }else {
-                        $color = "good"
-                    }
-
-                    #$([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))
-										
-					if ($data.lastRec -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))) { #something about last col file being older than 2 hours
-						$color = "danger"
-                        $atachText += "The .rec file hasn't been written to in over two hours! \n"
-					}
-					if ($data.lastCol -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))){ #something about last col file being older than 2 hours
-						$color = "danger"
-                        $atachText += "The .col file hasn't been written to in over two hours! \n"
-					}
                 
-                    $colorList.add($color)
-                    $textList.add($attachText)
-
-            
-
-                }#end loop
-
+                $colorList, $textList = set-ColorText -Data $listData
 			
-                $attach1 = ConvertTo-Attachment -Data $data -Color $colorList -Text -$textList
+                $attach1 = ConvertTo-Attachment -Data $listData -Color $colorList -Text -$textList
                 $attach1
                 send-slackmsg -body $bigMsg -attachments $attach1 -channel $alertsChannel #send the large message
 				
@@ -353,14 +398,8 @@ Try{
                                     $image = (((Invoke-WebRequest -Method get -Uri "http://api.thedogapi.co.uk/v2/dog.php").content) | convertFrom-json).data.url
                                     $attach = "[{'fallback':'Dog Photo','image_url':'$image'}]"
                                     send-slackmsg -body "Here is a photo of a dog:" -attachments $attach -channel $rtm.channel
-                                }
-                            
-                            
-                                #tell me about site x
-                                #read .col and .rec files
-                            
-                            
-                            
+                                }                          
+                                                        
                                 {$_ -match ".*time.*"}{
                                     send-SlackMsg -body "The time is $(get-date)" -channel $rtm.channel
                                 }
@@ -404,17 +443,21 @@ Try{
                                     $tolerance = $matches[1]
                                     send-SlackMsg -body "The tolerance is now set to $tolerance" -channel $rtm.channel
                                 }
-                                {$_ -match "tell me about (.+)" -or $_ -match "site (.+)"}{ #WIP
+                                {$_ -match "tell me about (.+)"}{ 
+                                    $_ -match "tell me about (.+)" #WTF?!
                                     if($siteList.contains($matches[1])){
                                         $msg = "The last update from $($matches[1]):"
+                                        
 
                                         $csv = ""
                                         $csv = Import-Csv "recordingData.csv"
-                                        $collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($Data.site), $($Data.location)"}
-
-
-                                        send-SlackMsg -body $msg -channel $rtm.channel
+                                        $collec = $csv | Group-Object -property Site,"Date (UNIX)"  | Where-Object {$_.Name -match "Collect Cents"}
+                                        $colorList,$textList = set-ColorText -data $collec[-1].Group -debug $true
+                                        $att = ConvertTo-Attachment -Data $collec[-1].Group -Color $colorList -Text $textList 
+                                        $att
+                                        send-SlackMsg -body $msg -channel $rtm.channel -attachments $att
                                     }else{
+                                        $matches
                                         send-SlackMsg -body "The site $($matches[1]) is not on the site list" -channel $rtm.channel
                                     }
                                 }
