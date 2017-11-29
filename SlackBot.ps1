@@ -1,16 +1,16 @@
 #Author: Alex Dobrovansky
-#Date: 07 Nov 17
+#Date: 29 Nov 17
 
 #a lot of the code that runs the bot has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot
 
 
-$token = get-content "token.txt" #not making that mistake again...
+$token = get-content ".\token.txt" #not making that mistake again...
 $tolerance = 5
-$alertsChannel = get-content "alertsChannel.txt"
+$alertsChannel = get-content ".\alertsChannel.txt"
 $monitorList = New-Object System.Collections.ArrayList
-import-csv "monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
+import-csv ".\monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
 $siteList = New-Object System.Collections.ArrayList
-import-csv "recordingData.csv" | Group-Object Site | foreach{$siteList.add($_.Name)}
+import-csv ".\recordingData.csv" | Group-Object Site | foreach{$siteList.add($_.Name)}
 $listData = New-Object System.Collections.ArrayList
 
 function Send-SlackMsg {
@@ -54,121 +54,52 @@ function Within-Tolerances {
     }
 }
 
-function ConvertTo-Attachment { #receives a list of data and puts in an attachment form
-    param ($Data, $Color, $Text)
-$null = @(    #beacuse it keeps on returning more than i want
-    if ($Color.count -eq 0){
-        $Color = New-Object System.Collections.ArrayList
-        for($z; $z -lt $data.Count; $z++){
-            $Color.add("good")
-        }
-    }
-    if ($Text.count -eq 0){
-        $Text = New-Object System.Collections.ArrayList
-        for($y; $y -lt $data.Count; $y++){
-            $Text.add("")
-        }
-    }  
-    $value = "["
-    if ($Data.Count -eq $Color.count -eq $Text.count){
-        if ($Color.Count -eq 1){
-            
-            $value += '{
-                "fallback":"Alert for location '+$datum.location+'",
-                "color": "'+$color+'",
-                "title": "'+$data.location+'",
-                "text": "'+$Text+'",
-                "fields": [
-                    {
-                        "title": "Last recorded write to .col file",
-                        "value": "<!date^'+ ($data.LastCol) +'^{time} on {date}|you need to update slack>",
-                        "short": true
-                    },
-                    {
-                        "title": "Last recorded write to .rec file",
-                        "value": "<!date^'+ ($data.LastRec) +'^{time} on {date}|you need to update slack>",
-                        "short": true
-                    },
-                    {
-                        "title": "Large Recordings",
-                        "value": "'+$data.Large+'",
-                        "short": true
-                    },
-                    {
-                        "title": "Small Recordings",
-                        "value": "'+$data.small+'",
-                        "short": true
-                    },
-                    {
-                        "title": "0KB Recordings",
-                        "value": "'+$data.empty+'",
-                        "short": true
-                    },
-                    {
-                        "title": "Free Space",
-                        "value": "'+([double]($data.FreeSpace)).ToString("P")+'",
-                        "short": true
-                    }
-                ]
-            },'
-
-
-        }else{
-            for($i=0;$i -lt $Data.count;$i++){
-                $datum = $data[$i]
-                $value += '{
-                    "fallback":"Alert for location '+$datum.location+'",
-                    "color": "'+$color[$i]+'",
-                    "title": "'+$datum.location+'",
-                    "text": "'+$Text[$i]+'",
-                    "fields": [
-                        {
-                            "title": "Last recorded write to .col file",
-                            "value": "<!date^'+ ($datum.LastCol) +'^{time} on {date}|you need to update slack>",
-                            "short": true
-                        },
-                        {
-                            "title": "Last recorded write to .rec file",
-                            "value": "<!date^'+ ($datum.LastRec) +'^{time} on {date}|you need to update slack>",
-                            "short": true
-                        },
-                        {
-                            "title": "Large Recordings",
-                            "value": "'+$datum.Large+'",
-                            "short": true
-                        },
-                        {
-                            "title": "Small Recordings",
-                            "value": "'+$datum.small+'",
-                            "short": true
-                        },
-                        {
-                            "title": "0KB Recordings",
-                            "value": "'+$datum.empty+'",
-                            "short": true
-                        },
-                        {
-                            "title": "Free Space",
-                            "value": "'+([double]($datum.FreeSpace)).ToString("P")+'",
-                            "short": true
-                        }
-                    ]
-                },'
+function ConvertTo-Attachment { #receives a single attachemtn. does not deal with lists.    #receives a list of data and puts in an attachment form
+    param ($Data, $Color = "good", $Text = "")
+$null = @(    #beacuse it keeps from returning more than i want
+    $value = "" #["
+    $value += '{
+        "fallback":"Alert for location '+$data.location+'",
+        "color": "'+$color+'",
+        "title": "'+$data.location+'",
+        "text": "'+$Text+'",
+        "fields": [
+            {
+                "title": "Last recorded write to .col file",
+                "value": "<!date^'+ ($data.LastCol) +'^{time} on {date}|you need to update slack>",
+                "short": true
+            },
+            {
+                "title": "Last recorded write to .rec file",
+                "value": "<!date^'+ ($data.LastRec) +'^{time} on {date}|you need to update slack>",
+                "short": true
+            },
+            {
+                "title": "Large Recordings",
+                "value": "'+$data.Large+'",
+                "short": true
+            },
+            {
+                "title": "Small Recordings",
+                "value": "'+$data.small+'",
+                "short": true
+            },
+            {
+                "title": "0KB Recordings",
+                "value": "'+$data.empty+'",
+                "short": true
+            },
+            {
+                "title": "Free Space",
+                "value": "'+([double]($data.FreeSpace)).ToString("P")+'",
+                "short": true
             }
-        }
-    }else{
-    "Arrays are not the same size!"
-        "Data.count = $($Data.count)"
-    "Color.count = $($Color.count)"
-    "Text.count = $($Text.count)"
-    }
-    
-
-
-    $value = $value.Substring(0,$value.Length-1) #removes last , from attach
-    $value += "]"
+        ]
+    },'
+    #$value = $value.Substring(0,$value.Length-1) #removes last , from attach
+    #$value += "]"
     $value = $value -replace "\\", "\\" #fixes any invalid json
-    $value = $value -replace "\\\\n","\n"
+    $value = $value -replace "\\\\n","\n" #fixes the new line getting broken by the above
     $value = $value -replace "\/", "\/"
 )
     return $value
@@ -182,26 +113,26 @@ function set-ColorText{
         [bool]$debug = $False 
         )
 $null=@(
-    $colorList = New-Object System.Collections.ArrayList
-    $textList = new-Object system.collections.arrayList
-    foreach ($datum in $Data){
-        $datum
+
+        $Data
         #for each line of data
         $color = "good"
         $attachText = ""
-<#         $collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($datum.site), $($datum.location)"}
+		
+		<#         
+		$collec = $csv | Group-Object -property Site,Location | Where-Object {$_.Name -eq "$($Data.site), $($Data.location)"}
         
         $largeAvg = (($collec.Group.Large | measure -Average).Average) 
         $smallAvg = (($collec.Group.Small | measure -Average).Average) 
         $emptyAvg = (($collec.Group.Empty | measure -Average).Average) 
 
 
-        #$check1 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Large | measure -Average).Average) -value $datum.large
-        $check1 = $datum.Large -in ($largeAvg-$tolerance)..($largeAvg+$tolerance)
-        #$check2 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Small | measure -Average).Average) -value $datum.small
-        $check2 = $datum.Small -in ($SmallAvg-$tolerance)..($SmallAvg+$tolerance)
-        #$check3 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Empty | measure -Average).Average) -value $datum.empty
-        $check3 = $datum.Empty -in ($EmptyAvg-$tolerance)..($EmptyAvg+$tolerance)
+        #$check1 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Large | measure -Average).Average) -value $Data.large
+        $check1 = $Data.Large -in ($largeAvg-$tolerance)..($largeAvg+$tolerance)
+        #$check2 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Small | measure -Average).Average) -value $Data.small
+        $check2 = $Data.Small -in ($SmallAvg-$tolerance)..($SmallAvg+$tolerance)
+        #$check3 = Within-Tolerances -tol $tolerance -avg $(($collec.Group.Empty | measure -Average).Average) -value $Data.empty
+        $check3 = $Data.Empty -in ($EmptyAvg-$tolerance)..($EmptyAvg+$tolerance)
 
         
         if(($check1 -or $check2 -or $check3)){
@@ -210,37 +141,41 @@ $null=@(
             $attachText += "The number of recordings isn't within tolerance \n "
             if($debug){
                 if($check1){
-                    $attachText += "The average for Large recordings is $(($collec.Group.Large | measure -Average).Average), but the current value is $($datum.large). \n"
+                    $attachText += "The average for Large recordings is $(($collec.Group.Large | measure -Average).Average), but the current value is $($Data.large). \n"
                 }
                 if($check2){
-                    $attachText += "The average for Small recordings is $(($collec.Group.Small | measure -Average).Average), but the current value is $($datum.Small). \n"
+                    $attachText += "The average for Small recordings is $(($collec.Group.Small | measure -Average).Average), but the current value is $($Data.Small). \n"
                 }
                 if($check3){
-                    $attachText += "The average for empty recordings is $(($collec.Group.empty | measure -Average).Average), but the current value is $($datum.empty). \n"
+                    $attachText += "The average for empty recordings is $(($collec.Group.empty | measure -Average).Average), but the current value is $($Data.empty). \n"
                 }
             }
         }else {
             $color = "good"
-        } #>
-
+        } 
+		#>
+        
+        if ($Data.BoardStatus -ne "NA"){
+            write-host $Data.BoardStatus
+            $color = "danger"
+            $attachText += "Something's up with board $($Data.BoardStatus) \n"
+        }
                             
-        if ($datum.lastRec -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))) { #something about last rec file being older than 2 hours
+        if ($Data.lastRec -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))) { #something about last rec file being older than 2 hours
+            Write-Host "Last Rec"
             $color = "danger"
             $attachText += "The .rec file hasn't been written to in over two hours! \n"
         }
-        if ($datum.lastCol -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))){ #something about last col file being older than 2 hours
+        if ($Data.lastCol -lt ([int][double]::Parse((Get-Date ((get-date).AddHours(-2)).ToUniversalTime() -UFormat %s)))){ #something about last col file being older than 2 hours
+            Write-Host "Last Col"
             $color = "danger"
             $attachText += "The .col file hasn't been written to in over two hours! \n"
         }
-    
-        $colorList.add($color)
-        $textList.add($attachText)
-
-
-
-    }#end loop
+        if ($color -eq "danger"){
+            write-host @attachText
+        }
 )
-    return $colorList, $textList
+    return $color, $attachText
 }  
 
 
@@ -276,7 +211,7 @@ Try{
             if((get-date).TimeOfDay.TotalSeconds -ge 43200 -and (get-date).TimeOfDay.TotalSeconds -lt 43220 -and (get-date).DayOfWeek -ne "Saturday" -and (get-date).DayOfWeek -ne "Sunday"){
                 #we don't get alerts on weekends
                 $dateCsv = ""
-                $dateCsv = Import-Csv recordingData.csv
+                $dateCsv = Import-Csv ".\recordingData.csv"
 
                 foreach ($site in $monitorList){
                     $date = ($dateCsv | Where-Object {$_.Site -eq $site}).Date[-1] #gets the latest date
@@ -297,17 +232,28 @@ Try{
 				$listData
 
                 $csv = ""
-                $csv = Import-Csv "recordingData.csv"
+                $csv = Import-Csv ".\recordingData.csv"
                 $colorList = New-Object System.Collections.ArrayList
                 $textList = new-Object system.collections.arrayList
                 $bigMsg = "For the site "+ $listData[0].site
                 
-                $colorList, $textList = set-ColorText -Data $listData
-			
-                $attach1 = ConvertTo-Attachment -Data $listData -Color $colorList -Text -$textList
-                $attach1
-                send-slackmsg -body $bigMsg -attachments $attach1 -channel $alertsChannel #send the large message
-				
+                
+				$attach = "["
+				foreach ($datum in $listData){
+					$color, $text = set-ColorText -Data $datum
+                    if ($color -ne "good"){
+					    $attach += ConvertTo-Attachment -Data $datum -Color $color -Text $text
+                    }
+				}
+				$attach = $attach.Substring(0,$attach.Length-1) #removes last , from attach
+                $attach += "]" 
+                $attach
+                if ($attach -ne "]"){ #no attachment, dont send message
+                    send-slackmsg -body $bigMsg -attachments $attach -channel $alertsChannel #send the large message
+                }
+				$listData = ""
+                $listData = New-Object System.Collections.ArrayList
+
 
                 if (!$siteList.contains($Data.site)){
                     $siteList.add($data.site)
@@ -356,6 +302,9 @@ Try{
                                     $msg += "This will remove 'Site 1' to the monitor list `n"
                                     $msg += "Do not include the quotation marks `n"
                                     $msg += " `n"
+                                    $msg += "Tell me about 'Site 1' `n"
+                                    $msg += "Sends you the last set of information on record about the site `n"
+                                    $msg += " `n"
                                     $msg += "*Set tolerance* 4 `n"
                                     $msg += "This will set the recording alerts tolerance to 4 `n"
                                     $msg += " `n"
@@ -381,12 +330,7 @@ Try{
                                     $joke = ((Invoke-RestMethod -Method Get -Uri "http://api.icndb.com/jokes/random").value).joke
                                     send-SlackMsg -body $joke -channel $rtm.channel
                                 }
-                                ##cat fact - does not work. problem with API
-                                #{$_ -match ".*cat fact.*"}{
-                                #    $catFact = ""
-                                #    $catFact = ((Invoke-RestMethod -Method Get -Uri "https://catfact.ninja/fact").value).fact
-                                #    send-SlackMsg -body $catFace -channel $rtm.channel
-                                #}
+
                                 #excuse
                                 {$_ -match ".*excuse.*"}{
                                     $excuse = ""
@@ -399,22 +343,27 @@ Try{
                                     $attach = "[{'fallback':'Dog Photo','image_url':'$image'}]"
                                     send-slackmsg -body "Here is a photo of a dog:" -attachments $attach -channel $rtm.channel
                                 }                          
-                                                        
+                                #time                        
                                 {$_ -match ".*time.*"}{
-                                    send-SlackMsg -body "The time is $(get-date)" -channel $rtm.channel
+                                    $time = [Math]::Floor([decimal](Get-Date(Get-Date).ToUniversalTime()-uformat "%s"))
+                                    $msg = "The time is <!date^$time^{time} on {date}|$(Get-Date)>"
+                                    send-SlackMsg -body $msg -channel $rtm.channel
                                 }
+                                #lists sites
                                 {$_ -match "list site.*" -or $_ -match "site list"}{
                                     $body = "Sites: `n"
                                     foreach($x in $siteList){$body += "$x `n"}
                                     send-SlackMsg -body $body -channel $rtm.channel
                                     $body = ""
                                 }
+                                #lists currently monitored sites
                                 {$_ -match "list monitored sites" -or $_ -match "list monitor" -or $_ -match "monitor list"}{
                                     $body = "Sites being monitored: `n"
                                     foreach($x in $monitorList){$body += "$x `n"}
                                     send-SlackMsg -body $body -channel $rtm.channel
                                     $body = ""
                                 }
+                                #adds a site to the monitor list
                                 {$_ -match "start monitor\w{0,3} (.+)"}{
                                     $_ -match "start monitor\w{0,3} (.+)"
                                     if ($monitorList.contains($matches[1])){ #need to write this to a file
@@ -423,12 +372,13 @@ Try{
                                         if ($siteList.contains($matches[1])) {
                                             send-SlackMsg -body "The site '$($matches[1])' has been added to the monitor list" -channel $rtm.channel
                                             $monitorList.add($matches[1])
-                                            $monitorList | Out-File "monitorList.csv"
+                                            $monitorList | Out-File ".\monitorList.csv"
                                         }else{
                                         send-SlackMsg -body "The site '$($matches[1])' does not exist." -channel $rtm.channel
                                         }
                                     }
                                 }
+                                #removes a site from the monitor list
                                 {$_ -match "stop monitor\w{0,3} (.+)"}{
                                     $_ -match "stop monitor\w{0,3} (.+)"
                                     if ($monitorList.contains($matches[1])){
@@ -439,21 +389,31 @@ Try{
                                         send-SlackMsg -body "The monitor list does not contain $($matches[1])" -channel $rtm.channel
                                     }
                                 }
+                                #outdated. changes the tolerance
                                 {$_ -match "set tolerance to (\d+)"}{
                                     $tolerance = $matches[1]
                                     send-SlackMsg -body "The tolerance is now set to $tolerance" -channel $rtm.channel
                                 }
+                                #send info about site
                                 {$_ -match "tell me about (.+)"}{ 
                                     $_ -match "tell me about (.+)" #WTF?!
                                     if($siteList.contains($matches[1])){
                                         $msg = "The last update from $($matches[1]):"
-                                        
-
+                                        $collec = ""
                                         $csv = ""
-                                        $csv = Import-Csv "recordingData.csv"
-                                        $collec = $csv | Group-Object -property Site,"Date (UNIX)"  | Where-Object {$_.Name -match "Collect Cents"}
-                                        $colorList,$textList = set-ColorText -data $collec[-1].Group -debug $true
-                                        $att = ConvertTo-Attachment -Data $collec[-1].Group -Color $colorList -Text $textList 
+                                        $csv = Import-Csv ".\recordingData.csv"
+                                        $collec = $csv | Group-Object -property Site,"Date (UNIX)"  | Where-Object {$_.Name -match $matches[1]}
+                                        
+                                        $att = "["
+                                        
+                                        foreach ($datum in $collec[-1].Group){
+                                            $datum
+                                            $color,$text = set-ColorText -data $datum
+                                            $att += ConvertTo-Attachment -Data $datum -Color $color -Text $text
+
+                                        }
+                                        $att = $att.Substring(0,$att.Length-1) #removes last , from attach
+                                        $att += "]"
                                         $att
                                         send-SlackMsg -body $msg -channel $rtm.channel -attachments $att
                                     }else{
@@ -461,14 +421,11 @@ Try{
                                         send-SlackMsg -body "The site $($matches[1]) is not on the site list" -channel $rtm.channel
                                     }
                                 }
-
-                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d+),(\d\.\d+),(\d+),(\d+)"}{
-                                    #Site,Loc,Large,Small,Empty,Date (UNIX),Free Space,Last Col Date,Last Rec Date
+                                #import the data
+                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d+),(\d\.\d+),(\d+),(\d+),(.+)"}{
+                                    #Site,Loc,Large,Small,Empty Recordings,Date (UNIX),Free Space,Last Col Date,Last Rec Date,BoardStats
                                     #is a csv, do analysis
                                     $msgCount+=1
-
-
-
 
                                     $splitData = $_ -split ","
                                     $datum = @{
@@ -481,18 +438,30 @@ Try{
                                         "FreeSpace" = $splitdata[6];
                                         "LastCol" = $splitdata[7];
                                         "LastRec" = $splitdata[8];
+                                        "BoardStatus" = $splitdata[9];
                                     }
                                     $listdata.add($datum)
                                     $datum
-                                    $_ | Out-File "recordingData.csv" -Append
+                                    $_ | Out-File ".\recordingData.csv" -Append
 
                                 }
-                                
+                                #Legacy import the data
+                                {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d+),(\d\.\d+),(\d+),(\d+)"}{
+                                    #Site,Loc,Large,Small,Empty,Date (UNIX),Free Space,Last Col Date,Last Rec Date
+                                    #is a csv, do analysis
+
+                                    #$_ | Out-File ".\recordingData.csv" -Append
+                                    
+                                    $splitData = $_ -split ","
+                                    send-slackmsg -body "I received some data from a site using an old data format. Please update $($splitData[0])" -channel $alertsChannel #send the large message
+
+                                }
+                                #legacy import data
                                 {$_ -match "(.+),(.+),(\d+),(\d+),(\d+),(\d\d?\/\d\d?\/\d{4}\s.+)"}{
                                     #Site,Loc,Large,Small,Empty,Date (UTC),Free Space
                                     #old style. still here for legacy support
                                     #just writes to file                                
-                                    $_ | Out-File "recordingData.csv" -Append
+                                    #$_ | Out-File ".\recordingData.csv" -Append
                                     #and then complains about it
                                     $splitData = $_ -split ","
                                     send-slackmsg -body "I received some data from a site using an old data format. Please update $($splitData[0])" -channel $alertsChannel #send the large message
