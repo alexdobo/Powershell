@@ -1,5 +1,5 @@
 #Author: Alex Dobrovansky
-#Date: 29 Nov 17
+#Date: 30 Nov 17
 
 #a lot of the code that runs the bot has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot
 
@@ -11,10 +11,15 @@ $monitorList = New-Object System.Collections.ArrayList
 import-csv ".\monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
 $siteList = New-Object System.Collections.ArrayList
 import-csv ".\recordingData.csv" | Group-Object Site | foreach{$siteList.add($_.Name)}
+$psBotWebHook = get-content ".\psBotWebHook.txt"
+$alexChannel = get-content ".\alexChannel.txt"
+
 $listData = New-Object System.Collections.ArrayList
 
+
+
 function Send-SlackMsg {
-    param($Channel,$Body,$attachments)
+    param($Channel,$Body,$Attachments)
 
     $message = @{
         id = "ps-bot"
@@ -28,7 +33,10 @@ function Send-SlackMsg {
     
     $array = [System.Text.Encoding]::UTF8.GetBytes($json)
     $Msg = New-Object System.ArraySegment[byte]  -ArgumentList @(,$Array)
+    #if($Channel -eq "@ps-bot"){
+    #    Invoke-WebRequest -Method post -Uri $psBotWebHook -body $message | out-file -filepath "slack.log" -append
 
+    #}else
     if(!$attachments){ #RTM does not support attachements, so it must be sent with a webrequest
         $Conn = $WS.SendAsync($Msg, [System.Net.WebSockets.WebSocketMessageType]::Text, [System.Boolean]::TrueString, $CT)
     }else{
@@ -38,9 +46,6 @@ function Send-SlackMsg {
         $message.attachments = $attachments
         Invoke-WebRequest -Method post -Uri "https://slack.com/api/chat.postMessage" -body $message | out-file -filepath "slack.log" -append
     }
-
-    
-
 
 }
 
@@ -397,7 +402,7 @@ Try{
                                 #send info about site
                                 {$_ -match "tell me about (.+)"}{ 
                                     $_ -match "tell me about (.+)" #WTF?!
-                                    if($siteList.contains($matches[1])){
+                                    if($siteList.ToLower().contains($matches[1].ToLower())){
                                         $msg = "The last update from $($matches[1]):"
                                         $collec = ""
                                         $csv = ""
@@ -497,6 +502,7 @@ Try{
     if ($WS) {
         "closing websocket"
         $ws.Dispose()
+        send-SlackMsg -body "SlackBot is going down!" -Attachments "[]" -Channel $alexChannel
 
     }
 
