@@ -1,124 +1,54 @@
 #Alex Dobrovansky
-#30 Nov 17
+#05 Dec 17
 
-#cd path of file first
+#v3
 
-#v1
-#$pattern = Read-Host -Prompt "Enter a phone number or time"
-#Get-ChildItem -recurse | Select-String -pattern $pattern | group path | select name
-
-
-#v2
-
-#define search attributes:
-$minStartTime = "09:15:00" #hh:mm:ss
-$minStartTime = [datetime]$minStartTime
-$maxStartTime = "10:15:00" #hh:mm:ss
-$maxStartTime = [datetime]$maxStartTime
-$minDuration = New-TimeSpan -minutes 5
-$maxDuration = New-TimeSpan -Minutes 10
-$phoneNumber = "3211234567"#3211234567
-$direction = "INC" #OUT or INC or ""
 $matchList = New-Object System.Collections.ArrayList
+$pv5List = @()
+
+
+Add-Type -AssemblyName System.Windows.Forms
+$pv5Location = New-Object System.Windows.Forms.FolderBrowserDialog -property @{
+    ShowNewFolderButton = $False
+    Description = "Select location of recordings to search"
+}
+[void]$pv5Location.ShowDialog()
+set-location $pv5Location.SelectedPath
 
 
 
 #all the logic:
-$PV5s = Get-ChildItem -recurse | Where-Object {$_.Extension -eq ".pv5"}
+$PV5s = Get-ChildItem | Where-Object {$_.Extension -eq ".pv5"}
 foreach ($file in $PV5s){
     [xml]$xml = [regex]::Match($(get-content $file),"<XML>.+<\/XML>").Value
-    $file.Name
     #time
-    if($minStartTime -and $maxStartTime){
-        if(($minStartTime -le [datetime]$xml.XML.Start) -and ($maxStartTime -ge [datetime]$xml.XML.Start)){
-            "match both time"
-            $timeBool = $True
-        }else{
-            "outside range"
-            $timebool = $False
-        }
-    }elseif($minStartTime){
-        if($minStartTime -le [datetime]$xml.XML.Start){
-            "min start time match"
-            $timeBool = $True
-        }else{
-            "too early"
-            $timeBool = $False
-        }
-    }elseif($maxStartTime){
-        if($maxStartTime -ge [datetime]$xml.XML.Start){
-            "max start time match"
-            $timeBool = $True
-        }else{
-            "too late"
-            $timeBool = $False
-        }
-    }else{
-        $timeBool = $True
-    }
 
-    #duration
     $callDuration = [datetime]$xml.XML.End - [datetime]$xml.XML.Start
-    if($minDuration -and $maxDuration){
-        if(($minDuration -le $callDuration) -and ($maxDuration -ge $callDuration)){
-            "within duration"
-            $durationBool = $True
-        }else{
-            "out of duration"
-            $durationBool = $False
-        }
-    }elseif($minDuration){
-        if($minDuration -le $callDuration){
-            "min duration"
-            $durationBool = $True
-        }else{
-            "too short"
-            $durationBool = $False
-        }
-    }elseif($maxDuration){
-        if ($maxDuration -ge $callDuration) {
-            "max duration"
-            $durationBool = $True
-        }else{
-            "too long"
-            $durationBool = $False
-        }
-    }else{
-        $durationBool = $True
-    }
+
+    $info = New-Object -TypeName PSObject -Property (@{
+        "Name" = $file.name;
+        "ID" = $xml.XML.Id;
+        "StartTime" = $xml.XML.Start;
+        "CLI" = $xml.XML.CLI;
+        "DDI" = $xml.XML.DDI;
+        "Direction" = $xml.XML.DIRECTION;
+        "Duration" = $callDuration;
+    })
     
-    #phone number
-    if($phoneNumber){
-        if ($xml.XML.CLI -like $phoneNumber) {
-            "CLI Match"
-            $phoneNumberBool = $True
-        }elseif($xml.XML.DDI -like $phoneNumber){
-            "DDI match"
-            $phoneNumberBool = $True
-        }else{
-            "number didn't match"
-            $phoneNumberBool = $False
-        }
-    }else{
-        $phoneNumberBool = $True
-    }
+    $pv5List += $info
 
-    #direction
-    if ($direction) {
-        if ($direction -eq $xml.XML.DIRECTION) {
-            "Direction"
-            $directionBool = $True
-        }else{
-            "wrong way go back"
-            $directionBool = $False
-        }
-    }else{
-        $directionBool = $True
-    }
-
-    if($timeBool -and $durationBool -and $phoneNumberBool -and $directionBool){
-        $matchList.Add($file.Name)
-        "ITS A MATCH!"
-    }
 }
+$pv5List | Out-GridView -Title "RecordingFindr" -PassThru | foreach { $matchList.Add($_) }
+
 $matchList
+
+$options = [System.Management.Automation.Host.ChoiceDescription[]] @("&Yes", "&No")
+$copyMatchedRecordings = $Host.UI.PromptForChoice("Copy Matches","Would you like to copy the selected matches?", $options, 1 ) 
+
+
+if($copyMatchedRecordings -eq 0 -and $matchList){
+    Add-Type -AssemblyName System.Windows.Forms
+    $copyLocation = New-Object System.Windows.Forms.FolderBrowserDialog -property @{ Description = "Select location to copy recordings to" }
+    [void]$copyLocation.ShowDialog()
+    foreach($pv5 in $matchList){ Copy-Item -Path $pv5 -Destination $copyLocation }
+}
