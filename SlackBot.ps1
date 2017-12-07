@@ -1,5 +1,5 @@
 #Author: Alex Dobrovansky
-#Date: 30 Nov 17
+#Date: 07 Dec 17
 
 #a lot of the code that runs the bot has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot
 
@@ -279,7 +279,17 @@ Try{
                 if ($msgCount -gt 0) {
 					$rtmCount += 1
 				}
-                $RTM = ($RTM | convertfrom-json)
+                
+                try{
+                    $RTM = ($RTM | convertfrom-json)
+                }catch{
+                    send-SlackMsg -body "SlackBot is going down! `n $($_.Exception.Message)"-Attachments "[]" -Channel $alexChannel
+                    Break
+                }finally{
+                    get-date
+                }
+                
+                
                 Switch ($RTM){
                     {($_.type -eq "message") -and (!$_.reply_to)} {
                         
@@ -402,7 +412,7 @@ Try{
                                 #send info about site
                                 {$_ -match "tell me about (.+)"}{ 
                                     $_ -match "tell me about (.+)" #WTF?!
-                                    if($siteList.ToLower().contains($matches[1].ToLower())){
+                                    if($siteList.contains($matches[1])){
                                         $msg = "The last update from $($matches[1]):"
                                         $collec = ""
                                         $csv = ""
@@ -423,7 +433,7 @@ Try{
                                         send-SlackMsg -body $msg -channel $rtm.channel -attachments $att
                                     }else{
                                         $matches
-                                        send-SlackMsg -body "The site $($matches[1]) is not on the site list" -channel $rtm.channel
+                                        send-SlackMsg -body "The site $($matches[1]) is not on the site list `n To get a list of sites, type 'site list'" -channel $rtm.channel
                                     }
                                 }
                                 #import the data
