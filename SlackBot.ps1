@@ -1,18 +1,19 @@
 #Author: Alex Dobrovansky
-#Date: 07 Dec 17
+#Date: 20 Dec 17
 
 #a lot of the code that runs the bot has been shamelessly stolen from https://github.com/markwragg/Powershell-SlackBot
 
+cd "C:\Users\Administrator\Documents\Powershell\SlackBot"
 
-$token = get-content ".\token.txt" #not making that mistake again...
+$token = get-content ".\variables\token.txt" #not making that mistake again...
 $tolerance = 5
-$alertsChannel = get-content ".\alertsChannel.txt"
+$alertsChannel = get-content ".\variables\alertsChannel.txt"
 $monitorList = New-Object System.Collections.ArrayList
 import-csv ".\monitorList.csv" -Header "Name" | foreach{$monitorList.add($_.Name)}
 $siteList = New-Object System.Collections.ArrayList
 import-csv ".\recordingData.csv" | Group-Object Site | foreach{$siteList.add($_.Name)}
-$psBotWebHook = get-content ".\psBotWebHook.txt"
-$alexChannel = get-content ".\alexChannel.txt"
+$psBotWebHook = get-content ".\variables\psBotWebHook.txt"
+$alexChannel = get-content ".\variables\alexChannel.txt"
 
 $listData = New-Object System.Collections.ArrayList
 
@@ -39,7 +40,7 @@ function Send-SlackMsg {
     #}else
     if(!$attachments){ #RTM does not support attachements, so it must be sent with a webrequest
         $Conn = $WS.SendAsync($Msg, [System.Net.WebSockets.WebSocketMessageType]::Text, [System.Boolean]::TrueString, $CT)
-    }else{
+    }else{ #has attachment
         $message.as_user = "false"
         $message.username = "ps-bot"
         $message.token = $token
@@ -512,8 +513,12 @@ Try{
     if ($WS) {
         "closing websocket"
         $ws.Dispose()
-        send-SlackMsg -body "SlackBot is going down!" -Attachments "[]" -Channel $alexChannel
-
+        $body = @{
+            username="ps-bot"
+            text="ps-bot is going down!"
+        } | ConvertTo-Json
+        Invoke-RestMethod -Method Post -Uri $psBotWebHook -Body $body
+        send-SlackMsg -body "ps-bot is going down!" -Attachments "[]" -Channel $alexChannel
     }
 
 }
