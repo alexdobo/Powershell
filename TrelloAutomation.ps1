@@ -1,5 +1,5 @@
 #Alex Dobrovansky
-#29 Dec 17
+#02 Jan 17
 #Trello Automation
 
 
@@ -79,10 +79,14 @@ Function ReadReservations($csvFile){
                 $name = $item.cust_name
                 $code = $item.itemcode #or equip_code?
                 $type = $item.itemtype
+                $make = $item.itemmake
+                $model = $item.itemname
                 $itemObj = New-Object -TypeName PSObject -prop (@{
                     'Name' = $name;
                     'Code' = $code;
-                    'Type' = $type
+                    'Type' = $type;
+                    'Make' = $make;
+                    'Model' = $model;
                 })
                 $items.Add($itemObj)
             }#end loop
@@ -93,6 +97,7 @@ Function ReadReservations($csvFile){
             $roomNumber = $res.Group[0].room_num
             $ready = $res.Group[0].ret_ready
             $notes = $res.Group[0].ret_notes
+            $van = $res.Group[0].ret_van
             $reservation = New-Object -TypeName PSObject -Prop (@{
                 'ID' = $id;
                 'Name' = $name;
@@ -100,7 +105,8 @@ Function ReadReservations($csvFile){
                 'RoomNumber' = $roomNumber;
                 'Ready' = $ready;
                 'Notes' = $notes;
-                'Items' = $items
+                'Van' = $van;
+                'Items' = $items;
             })
             $reservations.Add($reservation)
         }#end loop
