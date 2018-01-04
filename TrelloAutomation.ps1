@@ -1,7 +1,7 @@
 #Alex Dobrovansky
 #02 Jan 17
 #Trello Automation
-
+#v1.1
 
 Function MsgBox ($Text,$Err = "Error"){
     $null = @(
@@ -81,12 +81,14 @@ Function ReadReservations($csvFile){
                 $type = $item.itemtype
                 $make = $item.itemmake
                 $model = $item.itemname
+                $returned = $item.isreturned
                 $itemObj = New-Object -TypeName PSObject -prop (@{
                     'Name' = $name;
                     'Code' = $code;
                     'Type' = $type;
                     'Make' = $make;
                     'Model' = $model;
+                    'Returned' = $returned;
                 })
                 $items.Add($itemObj)
             }#end loop
@@ -98,6 +100,7 @@ Function ReadReservations($csvFile){
             $ready = $res.Group[0].ret_ready
             $notes = $res.Group[0].ret_notes
             $van = $res.Group[0].ret_van
+            $am = $res.Group[0].ret_am
             $reservation = New-Object -TypeName PSObject -Prop (@{
                 'ID' = $id;
                 'Name' = $name;
@@ -106,6 +109,7 @@ Function ReadReservations($csvFile){
                 'Ready' = $ready;
                 'Notes' = $notes;
                 'Van' = $van;
+                'AM' = $am;
                 'Items' = $items;
             })
             $reservations.Add($reservation)
@@ -137,21 +141,21 @@ Function AuthenticateTrello(){
 }
 Function ClearTheBoard($Auth){
     Write-Host "Clearing the board"
-    $Null = @(       
-        $cards = Get-TrelloCard -Token $auth -Id $board.id -List $listReady
+    $Null = @(
+        $cards = @()       
+        $cards += Get-TrelloCard -Token $auth -Id $board.id -List $listReady
         $cards += Get-TrelloCard -Token $auth -Id $board.id -List $listPending
         $cards += Get-TrelloCard -Token $auth -Id $board.id -List $LeChamoisPending
         $cards += Get-TrelloCard -Token $auth -Id $board.id -List $AavaPending
         $cards += Get-TrelloCard -Token $auth -Id $board.id -List $preAssigned
 
-        if($cards){
+        if($cards.count -gt 0){
             $progress = 0
-            Write-Progress -Activity "Deleting old cards..." -PercentComplete $progress -Status "Starting"
+            Write-Progress -id 1 -Activity "Deleting old cards..." -PercentComplete $progress -Status "Starting"
             foreach ($card in $cards){
                 $progress += 100/$cards.count
                 Write-Progress -id 1 -Activity "Deleteing old cards..." -PercentComplete $progress -Status $card.Name
                 Remove-TrelloCard -Token $auth -Id $card.id
-
             }
         }
     )
@@ -171,16 +175,22 @@ Function CreateCustomChecklist($Items){
         if ($item.Make -ne ""){
             $string += " - " + $item.Make + " " + $item.Model
         }
+        
         $progress += 100/$items.Count
         Write-Progress -ParentId 1 -Id 2 -Activity "Creating Checklist" -Status $string -PercentComplete $progress
-        Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name $string
+        if ($item.Returned -ne "FALSE"){
+            Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name $string -Checked true
+        }else{
+            Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name $string -Checked false
+        }
+
+        
     }
 }
 Function CreateGenericChecklist(){
     $checklist = Add-TrelloChecklist -Token $Auth -Id $Card.Id -Name "Return Log" -Position bottom
-    Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name "Full Return"
-    Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name "Partial Return"
-    Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name "Logged in DSR"
+    Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name "Full Return Logged in DSR" 
+    Add-TrelloChecklistItem -Token $Auth -Id $checklist.id -Name "Partial Return Loggin in DSR"
 }
 
 Function FindList($listName){
@@ -194,12 +204,16 @@ Function FindList($listName){
 }
 
 function GetListAndLabel(){
+    $label = @()
     if($res.Ready -eq "TRUE"){
         $list = $listReady
-        $label = $labelReady
+        $label += $labelReady
     }else{
         $list = $listPending
-        $label = $labelPending
+        $label += $labelPending
+    }
+    if($res.AM -eq "TRUE"){
+        $label += Get-TrelloLabel -Token $auth -Id $board.id -Name "AM Return"
     }
 
     if($res.Location -eq "1. LE CHAMOIS SKI SHOP"){
@@ -228,8 +242,8 @@ Function Export2Trello($Reservations){
             $LeChamoisPending = FindList -listName $LeChamoisPendingName
             $AavaPending = FindList -listName $AavaPendingName
             $preAssigned = FindList -listName $preAssignedName
-
-            if(ClearTheBoard -Auth $auth){
+            $clear = ClearTheBoard -Auth $auth
+            if($clear){
                 #labels
                 $labelReady = Get-TrelloLabel -Token $auth -Id $board.id -Name "Ready"
                 $labelPending = Get-TrelloLabel -Token $auth -Id $board.id -Name "Pending"
@@ -299,8 +313,8 @@ Function CleanUp($csv = $False, $xls = $False){
 $boardName = "Returns"
 $listReadyName = "Returns Ready"
 $listPendingName = "Returns Pending"
-$LeChamoisPendingName = "Returns Le Chamois Pending"
-$AavaPendingName = "Returns Aava Pending"
+$LeChamoisPendingName = "Returns Le Chamois"
+$AavaPendingName = "Returns Aava"
 $preAssignedName = "Returns Preassigned"
 
 "Making sure TrellOps is installed"
